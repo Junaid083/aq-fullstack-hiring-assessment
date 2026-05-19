@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "csv-parse": "^6.2.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "postgres": "^3.4.4"
