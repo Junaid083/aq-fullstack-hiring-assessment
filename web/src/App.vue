@@ -1,11 +1,61 @@
 <script setup lang="ts">
+import { onMounted, ref } from "vue";
+import { apiGet } from "./api";
 import UploadCsv from "./components/UploadCsv.vue";
+import ReportTable from "./components/ReportTable.vue";
+
+type Report = {
+  org:   string;
+  range: { from: string; to: string };
+  by_business_unit: Array<{
+    business_unit_id: string;
+    name:             string;
+    total_kg_co2e:    number;
+    is_rollup:        boolean;
+  }>;
+  by_activity_type: Array<{
+    activity_type: string;
+    total_kg_co2e: number;
+  }>;
+};
+
+const report = ref<Report | null>(null);
+const error  = ref<string | null>(null);
+
+async function loadReport() {
+  error.value = null;
+  try {
+    report.value = await apiGet<Report>("/reports/totals?from=2024-01-01&to=2025-01-01");
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "Failed to load report";
+  }
+}
+
+onMounted(loadReport);
 </script>
 
 <template>
   <main>
     <h1>AQ Emissions Tracker</h1>
-    <UploadCsv />
+
+    <UploadCsv @uploaded="loadReport" />
+
+    <hr>
+
+    <p
+      v-if="error"
+      class="error"
+    >
+      {{ error }}
+    </p>
+    <p v-else-if="!report">
+      Loading report…
+    </p>
+    <ReportTable
+      v-else
+      :by-business-unit="report.by_business_unit"
+      :by-activity-type="report.by_activity_type"
+    />
   </main>
 </template>
 

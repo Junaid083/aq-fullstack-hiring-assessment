@@ -3,6 +3,8 @@ import { ref } from "vue";
 import { apiPost } from "../api";
 import { CHUNK_SIZE } from "../constants";
 
+const emit = defineEmits<{ uploaded: [] }>();
+
 type ChunkResult = {
   batchId:       string;
   chunkAccepted: number;
@@ -84,6 +86,7 @@ async function processFile(file: File) {
         rejected: lastResult.totalRejected,
         skipped:  lastResult.skipped,
       };
+      emit("uploaded");
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Upload failed";
