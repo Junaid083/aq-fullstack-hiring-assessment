@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 import { apiGet } from "./api";
 import UploadCsv from "./components/UploadCsv.vue";
 import ReportTable from "./components/ReportTable.vue";
+import IssuesTable from "./components/IssuesTable.vue";
 
 type Report = {
   org:   string;
@@ -56,6 +57,10 @@ onMounted(loadReport);
       :by-business-unit="report.by_business_unit"
       :by-activity-type="report.by_activity_type"
     />
+
+    <hr>
+
+    <IssuesTable />
   </main>
 </template>
 
