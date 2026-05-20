@@ -198,3 +198,45 @@ Added an `uploaded` emit to `UploadCsv` — fires after a successful batch. App.
 - Emission factor is resolved at query time — if a factor gets corrected after the fact, historical report numbers silently change. Would add a `report_snapshots` table to freeze published numbers while still allowing on-demand recalculation with latest factors
 - The LATERAL subquery fires once per activity row — at 100M rows this becomes the bottleneck. Fix is to resolve and store `emission_factor_id` on each activity at ingest time, only re-derive when factors change
 - Date range is hardcoded in the frontend (`2024-01-01` to `2025-01-01`) — should be a date picker so users can query any period
+
+---
+
+## PR 4 — Data Issues Page (`feat/data-issues`)
+
+### Data Issues — Prompt 1
+
+> "what does this endpoint actually need to return — just the reason or the full row"
+
+Both. `reason_code` is machine-readable for filtering, `reason_detail` is human-readable for display. And `raw_row` as JSONB — the original CSV values verbatim — so the user can see exactly what they submitted without us reconstructing it from other tables.
+
+---
+
+### Data Issues — Prompt 2
+
+> "do we need pagination on this — it's only 4 rows right now"
+
+Always paginate issues endpoints. 4 rows today, 40,000 after a bad bulk upload. Cap at 500 per page regardless of what the client sends — `Math.min(limit, 500)`. An unbounded result set is a DoS vector and an OOM risk.
+
+---
+
+### Data Issues — Prompt 3
+
+> "how do we visually separate rejected rows from corrected ones in the table"
+
+Colour-coded status badges — red for rejected, yellow for corrected. Corrected rows are still issues (they were flagged during validation) but different severity. Row background also tinted so the status is obvious at a glance without reading the badge text.
+
+---
+
+### Data Issues — Prompt 4
+
+> "the raw_row is JSONB — what fields do we surface in the table"
+
+All the ones that matter for triage: `business_unit_id`, `activity_type`, `quantity`, `unit`, `source_ref`. The source ref is the most important — it maps back to the original invoice or meter reading, so the user knows exactly which physical record to fix.
+
+---
+
+### Data Issues — What I'd revisit with more time
+
+- No filtering by `reason_code` or `status` — would add `?status=rejected` and `?reason_code=unit_mismatch` query params for targeted triage
+- Issues don't link to their upload batch in the UI — a "View batch" link would let users trace a bad row back to the exact file that produced it
+- No "fix and re-upload" flow — the raw_row is there, a future feature could pre-populate an edit form so the user corrects it in-app rather than editing their CSV manually
