@@ -85,20 +85,19 @@ export async function validateRows(rows: RawRow[]): Promise<{
       continue;
     }
 
-    // 4. Unit mismatch — try conversion first, reject if not recoverable
+    // 4. Unit mismatch — log known conversions as corrected issues but still reject the row
+    // so corrected quantities don't silently alter emission totals without explicit user sign-off
     const expectedUnit = EXPECTED_UNITS[row.activity_type];
-    let finalQty  = qty;
-    let finalUnit = row.unit;
+    const finalQty  = qty;
+    const finalUnit = row.unit;
 
     if (expectedUnit && row.unit !== expectedUnit) {
       const conversion = UNIT_CONVERSIONS[row.unit];
       if (conversion && conversion.to === expectedUnit) {
-        finalQty  = qty * conversion.factor;
-        finalUnit = conversion.to;
         issues.push({
           raw_row:       row,
           reason_code:   REASON_CODE.UNIT_CONVERTED,
-          reason_detail: `${row.unit} converted to ${conversion.to} (×${conversion.factor}), original quantity: ${qty}`,
+          reason_detail: `${row.unit} can be converted to ${conversion.to} (×${conversion.factor}) — re-upload with correct unit`,
           status:        ISSUE_STATUS.CORRECTED,
         });
       } else {
@@ -108,8 +107,8 @@ export async function validateRows(rows: RawRow[]): Promise<{
           reason_detail: `expected unit ${expectedUnit} for ${row.activity_type}, got ${row.unit}`,
           status:        ISSUE_STATUS.REJECTED,
         });
-        continue;
       }
+      continue;
     }
 
     valid.push({

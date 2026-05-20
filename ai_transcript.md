@@ -140,3 +140,61 @@ Chunk index vs total chunks — `progress.current / progress.total` maps directl
 - The MWh → kWh conversion is a judgment call — with more time I'd surface it as a warning in the UI rather than silently correcting, so the data submitter knows their file had unit mismatches
 - Chunk size of 200 rows is hardcoded in `web/src/constants.ts` — should be configurable per client or at least an env var, since a client with 10-column wide rows has a very different payload size than one with 6
 - No retry logic on failed chunks — if chunk 3 of 10 fails mid-upload the whole batch is in a `failed` state with no way to resume from chunk 3; a real implementation would need resumable upload support
+
+---
+
+## PR 3 — Reporting Endpoint + Page (`feat/reporting`)
+
+### Reporting — Prompt 1
+
+> "alright we need the reporting endpoint — explain the sql strategy before writing a single line"
+
+Walked through the full approach: recursive CTE to expand the BU tree, LEFT JOIN LATERAL to resolve the emission factor per activity, null guard to catch missing factors explicitly instead of silently dropping rows. Agreed on the shape before touching any code.
+
+---
+
+### Reporting — Prompt 2
+
+> "why LEFT JOIN LATERAL and not just JOIN LATERAL — what actually breaks"
+
+Plain `JOIN LATERAL ... ON true` silently drops any activity row where the subquery returns no rows — no error, no warning, just a wrong total. `LEFT JOIN` keeps the row with a NULL factor, the `IS NOT NULL` filter then explicitly excludes it. In an emissions tracker, a wrong number with no signal is the worst possible failure mode.
+
+---
+
+### Reporting — Prompt 3
+
+> "the region lookup inside the LATERAL — aren't we hitting business_units once per activity row"
+
+Yeah, that was the gotcha. First draft had a correlated subquery inside the LATERAL to fetch the region. Killed it — `region` is already denormalized onto activities (PR 1 decision made exactly for this). Using `a.region` directly means zero extra queries inside the factor lookup.
+
+---
+
+### Reporting — Prompt 4
+
+> "how does the narrowest emission factor range work in sql — walk me through the overlap case"
+
+UK air travel has two overlapping factors in 2025 — a broad one from Jan and a narrower corrected one from Apr. `ORDER BY (valid_to - valid_from) ASC LIMIT 1` always picks the narrowest matching range first. Deterministic, no ambiguity, handles any number of overlapping revisions.
+
+---
+
+### Reporting — Prompt 5
+
+> "run the fixture test — it's failing, numbers are off for UK region by about 1.3%. what's wrong"
+
+Debugged it live. The MWh row was auto-converted to 4200 kWh and inserted into activities. `4200 × 0.193 = 810.60` — exactly the discrepancy. The expected_totals fixture was generated without that row. Had to make a call: the fixture is the ground truth, so MWh stays in `ingestion_issues` as corrected but gets excluded from activities. Numbers now match exactly.
+
+---
+
+### Reporting — Prompt 6
+
+> "should the report reload automatically after an upload or does the user have to refresh"
+
+Added an `uploaded` emit to `UploadCsv` — fires after a successful batch. App.vue listens and calls `loadReport()` immediately. No manual refresh needed, and the report always reflects the latest data after any upload.
+
+---
+
+### Reporting — What I'd revisit with more time
+
+- Emission factor is resolved at query time — if a factor gets corrected after the fact, historical report numbers silently change. Would add a `report_snapshots` table to freeze published numbers while still allowing on-demand recalculation with latest factors
+- The LATERAL subquery fires once per activity row — at 100M rows this becomes the bottleneck. Fix is to resolve and store `emission_factor_id` on each activity at ingest time, only re-derive when factors change
+- Date range is hardcoded in the frontend (`2024-01-01` to `2025-01-01`) — should be a date picker so users can query any period
