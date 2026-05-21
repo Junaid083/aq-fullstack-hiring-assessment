@@ -4,6 +4,7 @@ import { apiGet } from "./api";
 import UploadCsv from "./components/UploadCsv.vue";
 import ReportTable from "./components/ReportTable.vue";
 import IssuesTable from "./components/IssuesTable.vue";
+import MonthlyTrend from "./components/MonthlyTrend.vue";
 
 type Report = {
   org:   string;
@@ -61,6 +62,10 @@ onMounted(loadReport);
     <hr>
 
     <IssuesTable />
+
+    <hr>
+
+    <MonthlyTrend />
   </main>
 </template>
 
