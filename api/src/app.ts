@@ -3,6 +3,7 @@ import { healthRouter } from "./routes/health.js";
 import { ingestionRouter } from "./routes/ingestion.js";
 import { reportsRouter } from "./routes/reports.js";
 import { issuesRouter } from "./routes/issues.js";
+import { trendsRouter } from "./routes/trends.js";
 
 export function createApp(): Express {
   const app = express();
@@ -11,5 +12,6 @@ export function createApp(): Express {
   app.use(ingestionRouter);
   app.use(reportsRouter);
   app.use(issuesRouter);
+  app.use(trendsRouter);
   return app;
 }

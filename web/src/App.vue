@@ -4,6 +4,7 @@ import { apiGet } from "./api";
 import UploadCsv from "./components/UploadCsv.vue";
 import ReportTable from "./components/ReportTable.vue";
 import IssuesTable from "./components/IssuesTable.vue";
+import MonthlyTrend from "./components/MonthlyTrend.vue";
 
 type Report = {
   org:   string;
@@ -20,8 +21,9 @@ type Report = {
   }>;
 };
 
-const report = ref<Report | null>(null);
-const error  = ref<string | null>(null);
+const report     = ref<Report | null>(null);
+const error      = ref<string | null>(null);
+const refreshKey = ref(0);
 
 async function loadReport() {
   error.value = null;
@@ -32,6 +34,11 @@ async function loadReport() {
   }
 }
 
+function onUploaded() {
+  loadReport();
+  refreshKey.value++;
+}
+
 onMounted(loadReport);
 </script>
 
@@ -39,7 +46,7 @@ onMounted(loadReport);
   <main>
     <h1>AQ Emissions Tracker</h1>
 
-    <UploadCsv @uploaded="loadReport" />
+    <UploadCsv @uploaded="onUploaded" />
 
     <hr>
 
@@ -60,7 +67,11 @@ onMounted(loadReport);
 
     <hr>
 
-    <IssuesTable />
+    <IssuesTable :key="refreshKey" />
+
+    <hr>
+
+    <MonthlyTrend :key="refreshKey" />
   </main>
 </template>
 

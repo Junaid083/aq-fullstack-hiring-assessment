@@ -32,25 +32,16 @@ export type IssueRow = {
   status:        "rejected" | "corrected";
 };
 
-export async function validateRows(rows: RawRow[]): Promise<{
-  valid:  ValidRow[];
-  issues: IssueRow[];
-}> {
-  const buRows = await sql<{ id: string; region: string }[]>`
-    SELECT id, region FROM business_units
-  `;
-  const buMap = new Map(buRows.map((r) => [r.id, r.region]));
-
-  const factorRows = await sql<{ activity_type: string }[]>`
-    SELECT DISTINCT activity_type FROM emission_factors
-  `;
-  const validActivityTypes = new Set(factorRows.map((r) => r.activity_type));
-
+// Pure validation logic — no DB dependency, fully testable
+export function validateRowsSync(
+  rows:               RawRow[],
+  buMap:              Map<string, string>,
+  validActivityTypes: Set<string>,
+): { valid: ValidRow[]; issues: IssueRow[] } {
   const valid:  ValidRow[] = [];
   const issues: IssueRow[] = [];
 
   for (const row of rows) {
-    // 1. Unknown business unit
     const region = buMap.get(row.business_unit_id);
     if (!region) {
       issues.push({
@@ -62,7 +53,6 @@ export async function validateRows(rows: RawRow[]): Promise<{
       continue;
     }
 
-    // 2. Negative or invalid quantity
     const qty = Number(row.quantity);
     if (isNaN(qty) || qty < 0) {
       issues.push({
@@ -74,7 +64,6 @@ export async function validateRows(rows: RawRow[]): Promise<{
       continue;
     }
 
-    // 3. No emission factor for this activity type
     if (!validActivityTypes.has(row.activity_type)) {
       issues.push({
         raw_row:       row,
@@ -85,12 +74,9 @@ export async function validateRows(rows: RawRow[]): Promise<{
       continue;
     }
 
-    // 4. Unit mismatch — log known conversions as corrected issues but still reject the row
-    // so corrected quantities don't silently alter emission totals without explicit user sign-off
+    // Unit mismatch — log known conversions as corrected but still reject:
+    // corrected quantities must not silently alter emission totals without user sign-off
     const expectedUnit = EXPECTED_UNITS[row.activity_type];
-    const finalQty  = qty;
-    const finalUnit = row.unit;
-
     if (expectedUnit && row.unit !== expectedUnit) {
       const conversion = UNIT_CONVERSIONS[row.unit];
       if (conversion && conversion.to === expectedUnit) {
@@ -115,12 +101,30 @@ export async function validateRows(rows: RawRow[]): Promise<{
       business_unit_id: row.business_unit_id,
       region,
       activity_type:    row.activity_type,
-      quantity:         finalQty,
-      unit:             finalUnit,
+      quantity:         qty,
+      unit:             row.unit,
       activity_date:    row.activity_date,
       source_ref:       row.source_ref,
     });
   }
 
   return { valid, issues };
+}
+
+// DB-backed wrapper used by the ingestion pipeline
+export async function validateRows(rows: RawRow[]): Promise<{
+  valid:  ValidRow[];
+  issues: IssueRow[];
+}> {
+  const buRows = await sql<{ id: string; region: string }[]>`
+    SELECT id, region FROM business_units
+  `;
+  const buMap = new Map(buRows.map((r) => [r.id, r.region]));
+
+  const factorRows = await sql<{ activity_type: string }[]>`
+    SELECT DISTINCT activity_type FROM emission_factors
+  `;
+  const validActivityTypes = new Set(factorRows.map((r) => r.activity_type));
+
+  return validateRowsSync(rows, buMap, validActivityTypes);
 }
