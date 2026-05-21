@@ -240,3 +240,45 @@ All the ones that matter for triage: `business_unit_id`, `activity_type`, `quant
 - No filtering by `reason_code` or `status` — would add `?status=rejected` and `?reason_code=unit_mismatch` query params for targeted triage
 - Issues don't link to their upload batch in the UI — a "View batch" link would let users trace a bad row back to the exact file that produced it
 - No "fix and re-upload" flow — the raw_row is there, a future feature could pre-populate an edit form so the user corrects it in-app rather than editing their CSV manually
+
+---
+
+## PR 5 — Monthly Trend View (`feat/extra-view`)
+
+### Monthly Trend — Prompt 1
+
+> "bonus view — what makes sense given the data we actually have"
+
+Year-over-year was the obvious pick but the seed only covers 2024 — comparing against 2023 returns empty columns. Monthly trend within 2024 is better: real data, shows seasonal patterns, directly relevant to what Altruistiq's product does.
+
+---
+
+### Monthly Trend — Prompt 2
+
+> "should the api return a pivot table or a flat array"
+
+Flat array — one row per (month, activity_type) pair. Simple, generic, reusable. The Vue component pivots it client-side using computed sets for months and types. Keeps the endpoint clean and a future chart library can consume the same shape without us changing anything.
+
+---
+
+### Monthly Trend — Prompt 3
+
+> "what's the sql — is it just the reporting query with a different group by"
+
+Exactly. Same LEFT JOIN LATERAL pattern, same narrowest-range factor resolution, same null guard. Only difference is `GROUP BY DATE_TRUNC('month', activity_date), activity_type` instead of grouping by BU. No recursive CTE needed — we're not rolling up the hierarchy here.
+
+---
+
+### Monthly Trend — Prompt 4
+
+> "zero cells in the pivot — show 0 or a dash"
+
+Dash. Zero means something was measured and came out zero. A dash means nothing was recorded that month for that activity type. Semantically different in an emissions context — showing `0` would be misleading.
+
+---
+
+### Monthly Trend — What I'd revisit with more time
+
+- No chart — a stacked bar per month would make seasonal patterns immediately obvious; the flat API response is already the right shape for Chart.js or Recharts
+- Date range hardcoded in frontend — should be a picker, same issue as the main report
+- No column totals footer — summing each activity type across all 12 months would complete the pivot table properly
